@@ -164,13 +164,37 @@ function CameraPresets() {
     { id: "cinematic", label: "CINEMATIC" },
     { id: "free", label: "FREE" },
   ];
+  const outer: { id: FocusTarget; label: string }[] = [
+    { id: "mercury", label: "MERCURY" },
+    { id: "venus", label: "VENUS" },
+    { id: "jupiter", label: "JUPITER" },
+    { id: "saturn", label: "SATURN" },
+    { id: "uranus", label: "URANUS" },
+    { id: "neptune", label: "NEPTUNE" },
+  ];
   return (
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex gap-1 max-md:hidden">
-      {presets.map((p) => (
-        <button key={p.id} className={`mc-btn !py-1 !px-2 !text-[9px] ${focus === p.id ? "on" : ""}`} style={{ background: "rgba(9,14,23,0.7)" }} onClick={() => { sound.click(); setFocus(p.id); }}>
-          {p.label}
-        </button>
-      ))}
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1 max-md:hidden">
+      <div className="flex gap-1">
+        {presets.map((p) => (
+          <button key={p.id} className={`mc-btn !py-1 !px-2 !text-[9px] ${focus === p.id ? "on" : ""}`} style={{ background: "rgba(9,14,23,0.7)" }} onClick={() => { sound.click(); setFocus(p.id); }}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-1">
+        {outer.map((p) => (
+          <button
+            key={p.id}
+            title={`FOCUS ${p.label}`}
+            className={`mc-btn !py-0.5 !px-1.5 !text-[8px] ${focus === p.id ? "on" : ""}`}
+            style={{ background: "rgba(9,14,23,0.55)" }}
+            onClick={() => { sound.click(); setFocus(p.id); }}
+          >
+            {p.label}
+          </button>
+        ))}
+        <span className="mc-label ml-1.5" style={{ opacity: 0.45, letterSpacing: "0.12em" }}>· CLICK ANY BODY IN 3D TO FOCUS</span>
+      </div>
     </div>
   );
 }

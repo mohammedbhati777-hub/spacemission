@@ -1,7 +1,9 @@
 import { create } from "zustand";
 import { MissionConfig, Phase, defaultConfig } from "./lib/engine";
 
-export type FocusTarget = "sun" | "earth" | "mars" | "craft" | "free" | "top" | "cinematic";
+export type FocusTarget =
+  | "sun" | "earth" | "mars" | "craft" | "free" | "top" | "cinematic"
+  | "mercury" | "venus" | "jupiter" | "saturn" | "uranus" | "neptune";
 export type PanelId = "planner" | "telemetry" | "graphs" | "energy" | "physics" | "orbit" | "compare" | "settings" | "flight" | null;
 
 export interface AttemptSummary {

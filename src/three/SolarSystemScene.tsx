@@ -3,8 +3,8 @@
    Planets ephemeris-driven, spacecraft from the integrator,
    trails emergent, camera cinematic.
    ============================================================ */
-import { useEffect, useMemo, useRef } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useFrame, useThree, ThreeEvent } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import {
@@ -13,7 +13,24 @@ import {
 } from "../lib/constants";
 import { engine } from "../lib/engine";
 import { hohmannPoints } from "../lib/orbital";
-import { useSim } from "../store";
+import { useSim, FocusTarget } from "../store";
+import { sound } from "../lib/audio";
+
+/* invisible raycast target — generous, so small planets stay clickable */
+function HitSphere({ r, onPick, onHover }: { r: number; onPick: () => void; onHover?: (h: boolean) => void }) {
+  const [hov, setHov] = useState(false);
+  useEffect(() => () => { document.body.style.cursor = ""; }, []);
+  return (
+    <mesh
+      onClick={(e: ThreeEvent<MouseEvent>) => { if (e.delta < 6) { e.stopPropagation(); sound.click(); onPick(); } }}
+      onPointerOver={(e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setHov(true); onHover?.(true); document.body.style.cursor = "pointer"; }}
+      onPointerOut={() => { setHov(false); onHover?.(false); document.body.style.cursor = ""; }}
+    >
+      <sphereGeometry args={[r, 12, 12]} />
+      <meshBasicMaterial transparent opacity={hov ? 0.07 : 0} depthWrite={false} color="#8fc3ff" />
+    </mesh>
+  );
+}
 import {
   atmosphereFrag, exhaustFrag, exhaustVert, planetFrag, planetVert,
   ringFrag, ringVert, starFrag, starVert, sunFrag,
@@ -105,6 +122,7 @@ function Starfield() {
 function Sun() {
   const mode = useSim((s) => s.scaleMode);
   const quality = useSim((s) => s.quality);
+  const setFocus = useSim((s) => s.setFocus);
   const matRef = useRef<THREE.ShaderMaterial>(null);
   const coronaRef = useRef<THREE.Sprite>(null);
   const r = mode === "presentation" ? 9 : 1.4;
@@ -140,11 +158,12 @@ function Sun() {
         <shaderMaterial ref={matRef} vertexShader={planetVert} fragmentShader={sunFrag} uniforms={{ uTime: { value: 0 } }} />
       </mesh>
       {quality !== "PERFORMANCE" && (
-        <sprite ref={coronaRef} scale={[92, 92, 1]}>
+        <sprite ref={coronaRef} scale={[92, 92, 1]} raycast={() => null}>
           <spriteMaterial map={coronaTex} blending={THREE.AdditiveBlending} depthWrite={false} transparent opacity={0.9} />
         </sprite>
       )}
       <pointLight color="#fff1da" intensity={2.8} decay={0} distance={0} />
+      <HitSphere r={r * 1.55} onPick={() => setFocus("sun")} />
     </group>
   );
 }
@@ -161,12 +180,16 @@ function makeLabelTexture(text: string): THREE.CanvasTexture {
   return new THREE.CanvasTexture(cv);
 }
 
-function Label({ text, y, scale = 7 }: { text: string; y: number; scale?: number }) {
+function Label({ text, y, scale = 7, bright = false }: { text: string; y: number; scale?: number; bright?: boolean }) {
   const tex = useMemo(() => makeLabelTexture(text), [text]);
+  const mat = useRef<THREE.SpriteMaterial>(null);
   useEffect(() => () => tex.dispose(), [tex]);
+  useFrame((_, dt) => {
+    if (mat.current) mat.current.opacity = THREE.MathUtils.damp(mat.current.opacity, bright ? 1 : 0.75, 8, dt);
+  });
   return (
-    <sprite position={[0, y, 0]} scale={[scale, scale * 0.25, 1]}>
-      <spriteMaterial map={tex} transparent depthWrite={false} opacity={0.75} />
+    <sprite position={[0, y, 0]} scale={[scale, scale * 0.25, 1]} raycast={() => null}>
+      <spriteMaterial ref={mat} map={tex} transparent depthWrite={false} opacity={0.75} color={bright ? "#d5e8ff" : "#ffffff"} />
     </sprite>
   );
 }
@@ -175,6 +198,8 @@ function Label({ text, y, scale = 7 }: { text: string; y: number; scale?: number
 function Planet({ def }: { def: PlanetDef }) {
   const mode = useSim((s) => s.scaleMode);
   const showOrbits = useSim((s) => s.showOrbits);
+  const setFocus = useSim((s) => s.setFocus);
+  const [hovered, setHovered] = useState(false);
   const group = useRef<THREE.Group>(null);
   const matRef = useRef<THREE.ShaderMaterial>(null);
   const ringMatRef = useRef<THREE.ShaderMaterial>(null);
@@ -230,6 +255,7 @@ function Planet({ def }: { def: PlanetDef }) {
     <group>
       <primitive object={orbitLine} />
       <group ref={group}>
+        <HitSphere r={Math.max(visR * 2.3, 2.4)} onPick={() => setFocus(def.id as FocusTarget)} onHover={setHovered} />
         <mesh>
           <sphereGeometry args={[visR, 44, 44]} />
           <shaderMaterial ref={matRef} vertexShader={planetVert} fragmentShader={planetFrag} uniforms={uniforms} />
@@ -254,7 +280,7 @@ function Planet({ def }: { def: PlanetDef }) {
             />
           </mesh>
         )}
-        <Label text={def.name} y={visR + 1.5} />
+        <Label text={def.name} y={visR + 1.5} bright={hovered} />
       </group>
     </group>
   );
@@ -397,6 +423,7 @@ function Trails() {
 const EX_MAX = 320;
 function Spacecraft() {
   const mode = useSim((s) => s.scaleMode);
+  const setFocus = useSim((s) => s.setFocus);
   const group = useRef<THREE.Group>(null);
   const s1 = useRef<THREE.Mesh>(null);
   const s2 = useRef<THREE.Mesh>(null);
@@ -522,6 +549,7 @@ function Spacecraft() {
   return (
     <group>
       <group ref={group}>
+        <HitSphere r={4.2} onPick={() => setFocus("craft")} />
         {/* stage 1 booster */}
         <mesh ref={s1} position={[0, -1.55, 0]}>
           <cylinderGeometry args={[0.5, 0.56, 3.1, 14]} />
@@ -554,7 +582,7 @@ function Spacecraft() {
           </mesh>
         ))}
         {/* engine glow */}
-        <sprite ref={glow} position={[0, -3.3, 0]} scale={[2.6, 3.4, 1]}>
+        <sprite ref={glow} position={[0, -3.3, 0]} scale={[2.6, 3.4, 1]} raycast={() => null}>
           <spriteMaterial map={glowTex} blending={THREE.AdditiveBlending} depthWrite={false} transparent />
         </sprite>
       </group>
@@ -668,9 +696,11 @@ function CameraRig() {
     const tAbs = engine.absTime();
     let target = new THREE.Vector3(0, 0, 0);
     let desiredDist = -1;
-    if (focus === "earth") { target = helioToRender(engine.planetState("earth", tAbs).pos, mode); desiredDist = 24; }
-    else if (focus === "mars") { target = helioToRender(engine.planetState("mars", tAbs).pos, mode); desiredDist = 24; }
-    else if (focus === "sun") { desiredDist = mode === "presentation" ? 200 : 90; }
+    const pdef = PLANETS.find((p) => p.id === focus);
+    if (pdef) {
+      target = helioToRender(engine.planetState(pdef.id, tAbs).pos, mode);
+      desiredDist = pdef.id === "earth" || pdef.id === "mars" ? 24 : Math.max(pdef.renderR * 9, 14);
+    } else if (focus === "sun") { desiredDist = mode === "presentation" ? 200 : 90; }
     else if (focus === "craft") { target = craftRenderInfo(engine.craft.pos, mode).p; desiredDist = engine.craft.pos && isCraftLocal() ? 10 : 46; }
     else if (focus === "top") {
       const cam = state.camera;
